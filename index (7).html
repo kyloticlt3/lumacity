@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Minecraft Item Showcase Maker</title>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f4f2f8;--panel:#fff;--tx:#1d1a26;--mut:#6b6580;--bd:#ddd8e8;--ac:#8a3ffc}
+@media(prefers-color-scheme:dark){:root{--bg:#15121c;--panel:#1f1b2b;--tx:#f1eefa;--mut:#9d96b3;--bd:#342e47}}
+*{box-sizing:border-box}
+body{margin:0;font:14px system-ui,sans-serif;background:var(--bg);color:var(--tx);display:grid;grid-template-columns:330px 1fr;min-height:100vh}
+aside{background:var(--panel);border-right:1px solid var(--bd);padding:16px;overflow:auto;max-height:100vh}
+h1{font-size:18px;margin:0 0 12px}
+label{display:block;font-size:12px;color:var(--mut);margin:10px 0 4px}
+input,select,textarea{width:100%;padding:7px;border:1px solid var(--bd);border-radius:6px;background:var(--bg);color:var(--tx);font:inherit}
+input[type=color]{padding:2px;height:32px}input[type=range]{padding:0}
+.row{display:flex;gap:8px}.row>*{flex:1}
+button{padding:9px;border:0;border-radius:6px;background:var(--ac);color:#fff;font:600 13px system-ui;cursor:pointer;width:100%;margin-top:8px}
+button.g{background:var(--bd);color:var(--tx)}
+#grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+#grid button{margin:0;padding:4px;background:var(--bg);border:2px solid var(--bd);font-size:10px;color:var(--tx);font-weight:500}
+#grid button.on{border-color:var(--ac)}
+#grid canvas{width:100%;image-rendering:pixelated;display:block}
+main{padding:20px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+canvas#c{width:100%;max-width:1000px;border-radius:10px;box-shadow:0 8px 30px #0004;background:#222}
+#st{color:var(--mut);font-size:12px;min-height:16px}
+@media(max-width:800px){body{grid-template-columns:1fr}aside{max-height:none;border:0}}
+</style>
+</head>
+<body>
+<aside>
+<h1>⛏️ Item Showcase Maker</h1>
+<label>Weapon</label><div id="grid"></div>
+<label>Material / color</label><select id="mat"></select>
+<label>…or upload your own image</label><input type="file" id="img" accept="image/*">
+<label>Name (new line = new row)</label>
+<textarea id="name" rows="2"></textarea>
+<label>Stats (one per line)</label>
+<textarea id="stats" rows="4">Base Damage: 9.38
+Attack Speed: 0.59s
+Range: 8 Studs</textarea>
+<div class="row">
+<div><label>Rarity tag</label><input id="rar" value="MYTHIC"></div>
+<div><label>Preset</label><select id="pre">
+<option value="#a94dff">Mythic</option><option value="#ffb020">Legendary</option>
+<option value="#4d8dff">Rare</option><option value="#3ecf6a">Uncommon</option><option value="#9aa0aa">Common</option></select></div></div>
+<div class="row">
+<div><label>Accent</label><input type="color" id="ac" value="#a94dff"></div>
+<div><label>Background</label><input type="color" id="bg" value="#3a1a6b"></div></div>
+<label>Text animation</label>
+<select id="tanim"><option value="bounce">Bounce letters + wave</option><option value="type">Typewriter</option><option value="slide">Slide in</option><option value="glitch">Bounce + glitch</option></select>
+<label>Item animation</label>
+<select id="mode"><option value="turn">Turn (3D-style spin)</option><option value="rot">Rotate (flat spin)</option><option value="sway">Sway</option></select>
+<label>Spin speed</label><input type="range" id="spd" min="0.2" max="3" step="0.1" value="1">
+<label>Item size</label><input type="range" id="sz" min="0.4" max="1.4" step="0.05" value="1">
+<label>Item tilt (°)</label><input type="range" id="tilt" min="-180" max="180" value="45">
+<label>Record length (seconds)</label><input type="number" id="dur" value="6" min="2" max="30">
+<button id="rec">● Record video (.webm)</button>
+<button class="g" id="png">Save frame (.png)</button>
+<button class="g" id="rep">↻ Replay intro</button>
+</aside>
+<main><canvas id="c" width="1280" height="720"></canvas><div id="st"></div></main>
+<script>
+const $=id=>document.getElementById(id),cv=$('c'),x=cv.getContext('2d'),W=1280,H=720;
+const MATS={Wood:['#a0743c','#c49a5a','#6e4a22'],Stone:['#8d8d8d','#b4b4b4','#5f5f5f'],Iron:['#d8d8d8','#ffffff','#9a9a9a'],
+Gold:['#f5c518','#fff08a','#b88a0a'],Diamond:['#33ebcb','#aaffee','#1a9c88'],Netherite:['#4a4352','#6e6578','#2b262f'],
+Chaos:['#a94dff','#e0b3ff','#5a1f9e'],Ruby:['#e0314b','#ff9aa8','#8f1228']};
+const HD='#7a4a22',HL='#9c6a38',GD='#8a8a92';
+// sprites are drawn vertically (tip up) on a 16x16 grid; outline is added automatically
+const WEAPONS={
+Sword:{t:45,f:(P,R,m)=>{R(7,0,7,10,m[1]);R(8,1,8,10,m[0]);R(8,6,8,10,m[2]);R(4,11,11,11,GD);P(4,12,GD);P(11,12,GD);R(7,12,8,14,HD);P(7,13,HL);R(7,15,8,15,GD)}},
+Axe:{t:45,f:(P,R,m)=>{R(7,1,8,15,HD);R(7,1,7,15,HL);
+ [[5,8],[3,8],[2,8],[2,8],[3,8],[4,8]].forEach(([a,b],i)=>{for(let X=a;X<=b-1;X++)P(X,1+i,X<=4?m[1]:X<=6?m[0]:m[2])});
+ R(7,1,7,7,m[2])}},
+Mace:{t:45,f:(P,R,m)=>{R(7,7,8,15,HD);R(7,7,7,15,HL);R(6,14,9,15,GD);
+ for(let X=3;X<=12;X++)for(let Y=0;Y<=8;Y++){const d=Math.hypot(X-7.5,Y-4);if(d<=3.7)P(X,Y,(X-7.5)+(Y-4)<-1?m[1]:(X-7.5)+(Y-4)>1.5?m[2]:m[0])}
+ [[7,0],[8,0],[3,4],[12,4],[4,1],[11,1],[4,7],[11,7],[2,4],[13,4]].forEach(([a,b])=>P(a,b,m[1]))}},
+Trident:{t:45,f:(P,R,m)=>{R(7,5,8,15,m[2]);R(7,5,7,15,m[0]);R(4,5,11,6,m[0]);R(7,0,8,4,m[1]);R(4,1,4,4,m[1]);R(11,1,11,4,m[1]);P(3,3,m[1]);P(12,3,m[1]);P(6,2,m[1]);P(9,2,m[1])}},
+Spear:{t:45,f:(P,R,m)=>{R(7,5,8,15,HD);R(7,5,7,15,HL);R(7,0,8,5,m[0]);R(6,2,9,4,m[0]);R(7,0,7,4,m[1]);R(8,3,8,5,m[2]);R(6,6,9,6,GD)}},
+Bow:{t:45,f:(P,R,m)=>{const xs=[10,9,8,7,6,6,5,5,5,5,6,6,7,8,9,10];xs.forEach((a,y)=>{P(a,y,HD);P(a-1,y,HL)});R(11,1,11,14,'#f2f2f2');P(11,0,'#f2f2f2');P(11,15,'#f2f2f2');
+ R(5,7,10,8,m[0]);P(10,7,m[1]);P(11,7,m[1])}},
+Crossbow:{t:45,f:(P,R,m)=>{R(7,2,8,15,HD);R(7,2,7,15,HL);R(1,2,14,3,m[0]);R(1,1,2,2,m[1]);R(13,1,14,2,m[1]);
+ for(let i=0;i<6;i++){P(2+i,3+i,'#f2f2f2');P(13-i,3+i,'#f2f2f2')}R(7,0,8,6,m[2])}},
+Blaster:{t:90,f:(P,R,m)=>{R(6,1,9,9,m[2]);R(7,0,8,0,m[1]);R(7,2,8,8,m[0]);R(5,9,10,11,m[2]);R(6,10,9,10,m[1]);R(6,12,9,15,'#2b262f');R(6,12,6,15,'#3b3445');R(10,12,10,13,GD)}}
+};
+function spr(fn,m){const c=document.createElement('canvas');c.width=c.height=18;const g=c.getContext('2d');
+ const P=(a,b,col)=>{g.fillStyle=col;g.fillRect(a+1,b+1,1,1)};
+ const R=(a,b,c2,d,col)=>{for(let i=a;i<=c2;i++)for(let j=b;j<=d;j++)P(i,j,col)};
+ fn(P,R,m);const d=g.getImageData(0,0,18,18),o=new Uint8ClampedArray(d.data);
+ for(let j=0;j<18;j++)for(let i=0;i<18;i++){if(d.data[(j*18+i)*4+3])continue;
+  for(const[dx,dy]of[[1,0],[-1,0],[0,1],[0,-1]]){const a=i+dx,b=j+dy;if(a<0||b<0||a>17||b>17)continue;
+   if(d.data[(b*18+a)*4+3]){const k=(j*18+i)*4;o[k]=28;o[k+1]=24;o[k+2]=36;o[k+3]=255;break}}}
+ g.putImageData(new ImageData(o,18,18),0,0);return c}
+
+let wk='Mace',item,custom=null,t0=performance.now(),recording=false;
+$('mat').innerHTML=Object.keys(MATS).map(k=>`<option>${k}</option>`).join('');$('mat').value='Chaos';
+const grid=$('grid');
+Object.keys(WEAPONS).forEach(k=>{const b=document.createElement('button');b.dataset.k=k;b.innerHTML='<canvas width="18" height="18"></canvas>'+k;
+ b.onclick=()=>{wk=k;custom=null;$('tilt').value=WEAPONS[k].t;rebuild(true);t0=performance.now()};grid.appendChild(b)});
+function rebuild(rename){const m=MATS[$('mat').value];item=spr(WEAPONS[wk].f,m);
+ [...grid.children].forEach(b=>{b.classList.toggle('on',b.dataset.k===wk);const g=b.firstChild.getContext('2d');g.clearRect(0,0,18,18);g.drawImage(spr(WEAPONS[b.dataset.k].f,m),0,0)});
+ if(rename)$('name').value=$('mat').value+'\n'+wk}
+$('mat').onchange=()=>{rebuild(true);t0=performance.now()};
+$('img').onchange=e=>{const f=e.target.files[0];if(!f)return;const i=new Image();i.onload=()=>custom=i;i.src=URL.createObjectURL(f)};
+$('pre').onchange=e=>{$('ac').value=e.target.value;$('rar').value=e.target.selectedOptions[0].text.toUpperCase()};
+$('rep').onclick=()=>t0=performance.now();
+rebuild(true);
+
+const cl=p=>Math.min(1,Math.max(0,p)),ease=p=>1-Math.pow(1-cl(p),3);
+const back=p=>{p=cl(p);const c=1.70158;return 1+(c+1)*Math.pow(p-1,3)+c*Math.pow(p-1,2)};
+function shade(hex,a){const n=parseInt(hex.slice(1),16);const f=v=>Math.round(a>0?v+(255-v)*a:v*(1+a));return`rgb(${f(n>>16)},${f(n>>8&255)},${f(n&255)})`}
+
+// animated text: strokes = [[width,color],...] drawn first, then fill
+function atext(s,px,py,fill,strokes,delay,t){
+ const mode=$('tanim').value,paint=(ch,ax,ay,f)=>{strokes.forEach(([w,c])=>{x.lineWidth=w;x.strokeStyle=c;x.strokeText(ch,ax,ay)});x.fillStyle=f||fill;x.fillText(ch,ax,ay)};
+ if(mode==='slide'){const p=ease((t-delay)/0.6);if(p<=0)return;x.globalAlpha=p;paint(s,px-(1-p)*500,py);x.globalAlpha=1;return}
+ for(let i=0;i<s.length;i++){
+  const ch=s[i],cx=px+x.measureText(s.slice(0,i)).width,cw=x.measureText(ch).width;
+  const k=t-delay-i*(mode==='type'?0.07:0.045);
+  if(k<0)continue;
+  if(mode==='type'){paint(ch,cx,py);continue}
+  const q=cl(k/0.5),sc=0.5+0.5*back(q);let oy=-(1-q)*160;if(k>0.5)oy+=Math.sin(t*3+i*0.6)*5;
+  x.save();x.globalAlpha=cl(k/0.2);x.translate(cx+cw/2,py+oy);x.rotate((1-q)*0.6*(i%2?1:-1));x.scale(sc,sc);
+  if(mode==='glitch'&&(t%3)<0.18&&t>2){paint(ch,-cw/2-7,0,'#ff2d55');paint(ch,-cw/2+7,0,'#2dffe9')}
+  paint(ch,-cw/2,0);x.restore()}
+ if(mode==='type'){const L=Math.floor((t-delay)/0.07);if(L<s.length&&L>=0||(t%0.8)<0.4){x.fillStyle='#fff';x.fillRect(px+x.measureText(s.slice(0,Math.min(L+1,s.length))).width+4,py-60,6,64)}}
+}
+
+function draw(){
+ const t=(performance.now()-t0)/1000,ac=$('ac').value,bg=$('bg').value;
+ x.globalAlpha=1;x.fillStyle=bg;x.fillRect(0,0,W,H);
+ x.save();x.translate(W/2,H/2);x.rotate(t*0.08);const n=24;x.fillStyle=shade(bg,-0.35);
+ for(let i=0;i<n;i+=2){x.beginPath();x.moveTo(0,0);x.arc(0,0,1500,i*Math.PI*2/n,(i+1)*Math.PI*2/n);x.fill()}x.restore();
+ const vg=x.createRadialGradient(W/2,H/2,200,W/2,H/2,800);vg.addColorStop(0,'#0000');vg.addColorStop(1,'#0007');x.fillStyle=vg;x.fillRect(0,0,W,H);
+ // sparkles
+ x.fillStyle=ac;for(let i=0;i<28;i++){const sx=(i*73%100)/100*W,sy=H-((t*40*(0.5+(i%5)/5)+i*53)%(H+40)),s=4+(i%3)*3;x.globalAlpha=0.35+0.25*Math.sin(t*3+i);x.fillRect(sx,sy,s,s)}x.globalAlpha=1;
+
+ const lx=90;x.textBaseline='alphabetic';x.lineJoin='round';
+ // rarity badge
+ const rar=$('rar').value;x.font='600 26px Fredoka,sans-serif';const tw=x.measureText(rar).width+36,bp=back(t/0.5);
+ x.save();x.translate(lx+tw/2,131);x.scale(bp*(1+0.03*Math.sin(t*4)),bp);
+ x.fillStyle=ac;x.beginPath();x.roundRect(-tw/2,-21,tw,42,6);x.fill();x.strokeStyle='#fff';x.lineWidth=3;x.stroke();
+ x.fillStyle='#fff';x.textAlign='center';x.fillText(rar,0,10);x.restore();x.textAlign='left';
+ // name
+ const lines=$('name').value.split('\n'),fs=lines.length>2?96:120;x.font=`600 ${fs}px Fredoka,sans-serif`;
+ lines.forEach((l,i)=>atext(l,lx,250+i*fs*0.95,ac,[[14,'#0a0612'],[6,'#fff']],0.3+i*0.35,t));
+ // stats
+ const sy=250+(lines.length-1)*fs*0.95+70;x.font='44px "Patrick Hand",cursive';
+ $('stats').value.split('\n').filter(s=>s.trim()).forEach((s,i)=>{
+  const d=1.1+i*0.3,y=sy+i*62,p=back((t-d)/0.4);if(p<=0)return;
+  x.save();x.translate(lx+10,y-14+Math.sin(t*2+i)*3);x.scale(p*(1+0.08*Math.sin(t*4+i)),p);
+  x.fillStyle=ac;x.strokeStyle='#fff';x.lineWidth=3;x.beginPath();x.arc(0,0,10,0,7);x.fill();x.stroke();x.restore();
+  atext(s,lx+45,y,'#fff',[[6,'#0a0612']],d,t)});
+
+ // item
+ const sp=+$('spd').value,mode=$('mode').value,im=custom||item,size=520*$('sz').value*back((t-0.2)/0.9),bob=Math.sin(t*2)*14;
+ if(size>1){x.save();x.translate(W*0.74,H/2+bob);x.imageSmoothingEnabled=false;
+  const gl=x.createRadialGradient(0,0,20,0,0,320);gl.addColorStop(0,ac+'66');gl.addColorStop(1,ac+'00');x.fillStyle=gl;x.fillRect(-330,-330,660,660);
+  x.rotate($('tilt').value*Math.PI/180);
+  if(mode==='turn')x.scale(Math.cos(t*sp*2.2),1);else if(mode==='rot')x.rotate(t*sp*1.5);else x.rotate(Math.sin(t*sp*2)*0.35);
+  const r=im.width/im.height,w=r>=1?size:size*r,h=r>=1?size/r:size;
+  x.shadowColor='#000a';x.shadowBlur=30;x.shadowOffsetY=20;x.drawImage(im,-w/2,-h/2,w,h);x.restore()}
+ requestAnimationFrame(draw)}
+
+$('png').onclick=()=>{const a=document.createElement('a');a.href=cv.toDataURL('image/png');a.download='showcase.png';a.click()};
+$('rec').onclick=()=>{
+ if(recording||!window.MediaRecorder){$('st').textContent='Recording not supported in this browser.';return}
+ const d=+$('dur').value,ch=[],mr=new MediaRecorder(cv.captureStream(60),{mimeType:'video/webm',videoBitsPerSecond:12e6});
+ mr.ondataavailable=e=>ch.push(e.data);
+ mr.onstop=()=>{recording=false;const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(ch,{type:'video/webm'}));a.download='showcase.webm';a.click();$('st').textContent='Saved showcase.webm ✔'};
+ recording=true;t0=performance.now();mr.start();
+ const iv=setInterval(()=>{const l=d-(performance.now()-t0)/1000;$('st').textContent='Recording… '+Math.max(0,l).toFixed(1)+'s';if(l<=0){clearInterval(iv);mr.stop()}},100)};
+Promise.all([document.fonts.load('600 40px Fredoka'),document.fonts.load('40px "Patrick Hand"')]).catch(()=>{}).finally(()=>{t0=performance.now();draw()});
+</script>
+</body>
+</html>
